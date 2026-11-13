@@ -10,11 +10,11 @@ As três agências credenciadas pela FDA estão cobertas, conforme o documento *
 
 ## Instalar no Android
 
-1. Abra o endereço HTTPS no Chrome (a câmera não funciona em página sem cadeado).
+O aplicativo está publicado em [https://murillounder.github.io/leitor-udi-gs1/](https://murillounder.github.io/leitor-udi-gs1/).
+
+1. Abra esse endereço no Chrome (a câmera não funciona em página sem cadeado).
 2. Menu do Chrome → **Instalar app** ou **Adicionar à tela inicial**.
 3. Abra pelo ícone. A partir daí a leitura funciona offline.
-
-O endereço público depende do GitHub Pages (veja mais abaixo). Enquanto o repositório não estiver publicado, o app só existe na máquina de desenvolvimento.
 
 ## O que a leitura faz
 
@@ -65,14 +65,8 @@ O servidor de desenvolvimento sobe em [http://127.0.0.1:43127](http://127.0.0.1:
 
 ## Publicar no GitHub Pages
 
-Esta sessão não conseguiu criar o repositório na conta **MurilloUnder**: o GitHub daqui não está autenticado para criar repositório. O que falta, no computador em que a conta MurilloUnder está logada:
+O aplicativo está no ar em [https://murillounder.github.io/leitor-udi-gs1/](https://murillounder.github.io/leitor-udi-gs1/).
 
-```bash
-gh repo create MurilloUnder/leitor-udi-gs1 --public --source=. --remote=github --push
-```
+No Android, abra esse endereço no Chrome, toque no menu e escolha **Instalar app** ou **Adicionar à tela inicial**. Abra pelo ícone; depois da primeira abertura a leitura segue sem internet.
 
-No GitHub, em **Settings → Pages → Build and deployment**, escolha **GitHub Actions**. O fluxo `.github/workflows/pages.yml` publica em:
-
-`https://murillounder.github.io/leitor-udi-gs1/`
-
-Esse é o endereço para instalar no celular. Não coloque planilha real nem segredo no repositório. O exemplo versionado é fictício.
+O fluxo `.github/workflows/pages.yml` publica a cada push em `main`, com o GitHub Pages na fonte **GitHub Actions**. Não coloque planilha real nem segredo no repositório. O exemplo versionado é fictício.
