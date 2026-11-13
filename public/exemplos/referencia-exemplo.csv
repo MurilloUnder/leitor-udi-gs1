@@ -1,0 +1,12 @@
+﻿modelo;nível de embalagem;GTIN;quantidade por embalagem;tipo de embalagem;observacao
+Sonda Exemplo Alfa;unidade;09990000000012;1;unidade;EXEMPLO FICTÍCIO — não é produto nem fabricante real
+Sonda Exemplo Alfa;blister;19990000000019;10;blister;EXEMPLO FICTÍCIO — não é produto nem fabricante real
+Sonda Exemplo Alfa;caixa;29990000000016;50;caixa;EXEMPLO FICTÍCIO — não é produto nem fabricante real
+Cateter Exemplo Beta;unidade;09990000000029;1;unidade;EXEMPLO FICTÍCIO — não é produto nem fabricante real
+Cateter Exemplo Beta;caixa;29990000000023;20;caixa;EXEMPLO FICTÍCIO — não é produto nem fabricante real
+Peça Exemplo HIBCC;unidade;H999EXEMPLO01;1;unidade;EXEMPLO FICTÍCIO — DI HIBCC inventado
+Componente Exemplo ISBT;unidade;Z0000EXEMPLO0001;1;unidade;EXEMPLO FICTÍCIO — DI ISBT 128 inventado
+Exemplo público FDA — GS1;unidade;51022222233336;1;unidade;String do documento público FDA v1.4, não é fabricante real
+Exemplo público FDA — HIBCC;unidade;H123PARTNO1234567890120;1;unidade;String do documento público FDA v1.4, não é fabricante real
+Exemplo público FDA — ISBT 128;unidade;A9999XYZ100T0944;1;unidade;String do documento público FDA v1.4, não é fabricante real
+EXEMPLO indicador 9;unidade;99990000000039;1;medida variável;EXEMPLO FICTÍCIO — GTIN-14 com indicador 9, item de medida variável
