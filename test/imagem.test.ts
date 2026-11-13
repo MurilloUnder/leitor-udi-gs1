@@ -2,7 +2,7 @@ import { readFileSync, writeFileSync } from "node:fs";
 import { beforeAll, describe, expect, it } from "vitest";
 import bwipjs from "bwip-js";
 import { PNG } from "pngjs";
-import { lerCodigo, usarWasmEmTeste } from "../src/scan";
+import { lerCodigo, lerQuadro, usarWasmEmTeste } from "../src/scan";
 import { lerUdi } from "../src/udi/ler";
 
 function pixels(png: Buffer): { width: number; height: number; data: Uint8ClampedArray } {
@@ -45,6 +45,32 @@ describe("imagem", () => {
     expect(resultado.di).toBe(GTIN);
     expect(resultado.campos.find((c) => c.ai === "10")?.valor).toBe("ABC123");
     expect(resultado.campos.find((c) => c.ai === "17")?.valor).toBe("261231");
+  });
+
+  it("lê um DataMatrix pequeno no centro de um quadro grande", async () => {
+    const png = await bwipjs.toBuffer({
+      bcid: "gs1datamatrix",
+      text: `(01)${GTIN}(17)280330(10)LOTEEXEMPLO`,
+      scale: 4,
+      paddingwidth: 8,
+      paddingheight: 8,
+    });
+    const simbolo = pixels(png);
+    const lado = simbolo.width * 5;
+    const data = new Uint8ClampedArray(lado * lado * 4);
+    data.fill(255);
+    const ox = Math.round((lado - simbolo.width) / 2);
+    const oy = Math.round((lado - simbolo.height) / 2);
+    for (let y = 0; y < simbolo.height; y++) {
+      const origem = y * simbolo.width * 4;
+      const destino = ((oy + y) * lado + ox) * 4;
+      data.set(simbolo.data.subarray(origem, origem + simbolo.width * 4), destino);
+    }
+    const lido = await lerQuadro({ width: lado, height: lado, data });
+    expect(lido?.formato).toBe("DataMatrix");
+    const resultado = lerUdi(lido!.texto, { hoje: { ano: 2026, mes: 1, dia: 1 }, anoCorrente: 2026 });
+    expect(resultado.di).toBe(GTIN);
+    expect(resultado.validades[0]?.iso).toBe("2028-03-30");
   });
 
   it("lê um QR com GS1 Digital Link", async () => {

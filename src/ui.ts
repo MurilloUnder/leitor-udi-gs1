@@ -18,10 +18,11 @@ import { conferir, type Conferencia, type LinhaReferencia } from "./conferencia"
 import elementos from "./dados/elementos-udi.json";
 import { EXEMPLO_GS1, EXEMPLO_HIBCC, EXEMPLO_ISBT } from "./exemplos";
 import { excelLote, nomeImagem, pdfLeitura, pdfLote, zipLeituras } from "./exportar";
+import { ajustarTrilha, escolherCameraPrincipal, restricoesCamera, type AjusteCamera, type CameraLista } from "./camera";
 import { fotosDe } from "./foto";
 import { agruparLeituras, leituraAbreLoteNovo, loteAberto, type LoteConferencia, type ModoAgrupamento } from "./lotes";
 import { lerPlanilha, planilhaParaCsv, planilhaParaXlsx } from "./planilha";
-import { lerCodigo, type Caixa } from "./scan";
+import { lerQuadro, type Caixa, type QuadroPixels } from "./scan";
 import { dataHoraSaoPaulo } from "./udi/tempo";
 import { lerUdi } from "./udi/ler";
 import { montarTrilha, textoTrilha } from "./udi/trilha";
@@ -59,6 +60,12 @@ let estado: Estado;
 let raiz: HTMLElement;
 let fluxo: MediaStream | null = null;
 let geracaoCamera = 0;
+let cameraTocha = false;
+let cameraZoom: number | null = null;
+let camerasConhecidas: CameraLista[] = [];
+let cameraAtualId = "";
+let ajusteAtual: AjusteCamera | null = null;
+const INTERVALO_CAMERA_MS = 110;
 const miniaturas = new Map<string, string>();
 let fotoAberta: { id: string; url: string } | null = null;
 
@@ -76,6 +83,25 @@ function botao(texto: string, classe: string, acao: () => void): HTMLButtonEleme
   no.textContent = texto;
   no.addEventListener("click", acao);
   return no;
+}
+
+function entradaFoto(texto: string, id: string, nativa: boolean): HTMLLabelElement {
+  const arquivo = document.createElement("input");
+  arquivo.type = "file";
+  arquivo.accept = "image/*";
+  arquivo.id = id;
+  arquivo.hidden = true;
+  if (nativa) arquivo.capture = "environment";
+  arquivo.addEventListener("change", () => {
+    const file = arquivo.files?.[0];
+    arquivo.value = "";
+    if (file) void lerArquivo(file);
+  });
+  const rotulo = document.createElement("label");
+  rotulo.className = "botao-sec arquivo";
+  rotulo.htmlFor = id;
+  rotulo.append(document.createTextNode(texto), arquivo);
+  return rotulo;
 }
 
 function baixar(nome: string, blob: Blob): void {
@@ -115,6 +141,7 @@ function desenhar(): void {
       if (cursor != null) deNovo.setSelectionRange(cursor, cursor);
     }
   }
+  if (estado.cameraLigada && fluxo) atualizarVisibilidadeCamera();
 }
 
 function navegacao(): HTMLElement {
@@ -145,34 +172,70 @@ function telaLer(): HTMLElement {
     caixa.append(faixa);
   }
   const acoes = el("div", "grade");
-  acoes.append(botao(estado.cameraLigada ? "Parar câmera" : "Abrir câmera", "botao", () => {
+  const botaoCamera = botao(estado.cameraLigada ? "Parar câmera" : "Abrir câmera", "botao", () => {
     if (estado.cameraLigada) pararCamera();
     else void abrirCamera();
-  }));
-  const arquivo = document.createElement("input");
-  arquivo.type = "file";
-  arquivo.accept = "image/*";
-  arquivo.id = "arquivo-imagem";
-  arquivo.hidden = true;
-  arquivo.addEventListener("change", () => {
-    const file = arquivo.files?.[0];
-    if (file) void lerArquivo(file);
   });
-  const rotulo = document.createElement("label");
-  rotulo.className = "botao-sec arquivo";
-  rotulo.htmlFor = "arquivo-imagem";
-  rotulo.append(document.createTextNode("Escolher imagem"), arquivo);
-  acoes.append(rotulo);
+  botaoCamera.id = "botao-camera";
+  acoes.append(botaoCamera);
+  const fotos = el("div", "linha");
+  fotos.append(entradaFoto("Ler de foto", "arquivo-foto", true));
+  fotos.append(entradaFoto("Escolher imagem", "arquivo-imagem", false));
+  acoes.append(fotos);
+  acoes.append(el("p", "ajuda", "Ler de foto abre a câmera do Android em resolução cheia. Escolher imagem usa a galeria."));
   caixa.append(acoes);
 
+  const visor = el("div", "visor-caixa");
+  visor.id = "visor-caixa";
+  visor.hidden = !estado.cameraLigada;
   const video = document.createElement("video");
   video.className = "video";
   video.muted = true;
   video.autoplay = true;
   video.playsInline = true;
   video.id = "visor";
-  video.hidden = !estado.cameraLigada;
-  caixa.append(video);
+  visor.append(video);
+  const mira = el("div", "mira");
+  mira.setAttribute("aria-hidden", "true");
+  visor.append(mira);
+  caixa.append(visor);
+
+  const controles = el("div", "controles-camera");
+  controles.id = "controles-camera";
+  controles.hidden = !estado.cameraLigada;
+  const seletor = document.createElement("select");
+  seletor.id = "camera-dispositivo";
+  seletor.addEventListener("change", () => {
+    if (!estado.cameraLigada) return;
+    const id = seletor.value;
+    const atual = trilhaVideo()?.getSettings().deviceId;
+    if (id && id !== atual) void abrirCamera(id);
+  });
+  const labCamera = el("label", "", "Câmera");
+  labCamera.append(seletor);
+  controles.append(labCamera);
+  const tocha = botao("Lanterna", "botao-sec", () => void alternarTocha());
+  tocha.id = "tocha";
+  controles.append(tocha);
+  const zoom = document.createElement("input");
+  zoom.type = "range";
+  zoom.id = "zoom";
+  zoom.min = "1";
+  zoom.max = "1";
+  zoom.step = "0.1";
+  zoom.value = "1";
+  zoom.addEventListener("input", () => {
+    const track = trilhaVideo();
+    cameraZoom = Number(zoom.value);
+    if (!track) return;
+    const pedido = { zoom: cameraZoom } as MediaTrackConstraintSet;
+    void track.applyConstraints({ advanced: [pedido] }).catch(() => undefined);
+  });
+  const labZoom = el("label", "", "Zoom");
+  labZoom.id = "rotulo-zoom";
+  labZoom.append(zoom);
+  controles.append(labZoom);
+  caixa.append(controles);
   const status = el("p", "ajuda", "");
   status.id = "status-camera";
   caixa.append(status);
@@ -844,6 +907,7 @@ function telaSobre(): HTMLElement {
     "No menu do Chrome, toque em Instalar app ou Adicionar à tela inicial.",
     "Abra pelo ícone. Depois da primeira carga, a leitura funciona sem internet.",
     "A câmera exige HTTPS. Um arquivo aberto do computador não serve.",
+    "Se o código for pequeno, enquadre no quadrado, aumente o zoom e ligue a lanterna. Ler de foto usa a câmera nativa em resolução cheia.",
   ]) {
     const li = document.createElement("li");
     li.textContent = passo;
@@ -923,18 +987,91 @@ async function lerArquivo(file: File): Promise<void> {
     ctx.fillRect(0, 0, canvas.width, canvas.height);
     ctx.drawImage(bitmap, 0, 0);
     bitmap.close();
-    const lido = await lerCodigo(ctx.getImageData(0, 0, canvas.width, canvas.height));
-    if (!lido) {
+    const achado = await decodificarQuadro(ctx.getImageData(0, 0, canvas.width, canvas.height), canvas);
+    if (!achado) {
       estado.avisoTela = "Não encontrei DataMatrix, QR nem código de barras nessa imagem.";
       desenhar();
       return;
     }
-    const fotos = await fotosDe(canvas, canvas.width, canvas.height, lido.caixa);
-    await publicar(lido.texto, "imagem", fotos);
+    const fotos = await fotosDe(canvas, canvas.width, canvas.height, achado.caixa);
+    await publicar(achado.texto, "imagem", fotos);
   } catch {
     estado.avisoTela = "A imagem não pôde ser lida neste navegador.";
     desenhar();
   }
+}
+
+function trilhaVideo(): MediaStreamTrack | null {
+  return fluxo?.getVideoTracks()[0] ?? null;
+}
+
+function atualizarVisibilidadeCamera(): void {
+  const botaoCamera = document.getElementById("botao-camera");
+  if (botaoCamera) botaoCamera.textContent = estado.cameraLigada ? "Parar câmera" : "Abrir câmera";
+  const caixa = document.getElementById("visor-caixa");
+  if (caixa) caixa.hidden = !estado.cameraLigada;
+  const controles = document.getElementById("controles-camera");
+  if (controles) controles.hidden = !estado.cameraLigada;
+  const video = document.getElementById("visor");
+  if (video instanceof HTMLVideoElement && estado.cameraLigada && fluxo && video.srcObject !== fluxo) {
+    video.srcObject = fluxo;
+    void video.play().catch(() => undefined);
+  }
+  if (estado.cameraLigada && camerasConhecidas.length) preencherCameras(camerasConhecidas, cameraAtualId);
+  if (estado.cameraLigada && ajusteAtual) aplicarControles(ajusteAtual);
+}
+
+function preencherCameras(lista: CameraLista[], atualId: string): void {
+  camerasConhecidas = lista;
+  cameraAtualId = atualId;
+  const select = document.getElementById("camera-dispositivo");
+  if (!(select instanceof HTMLSelectElement)) return;
+  const escolhido = select.value;
+  select.replaceChildren();
+  lista.forEach((camera, indice) => {
+    const opcao = document.createElement("option");
+    opcao.value = camera.deviceId;
+    opcao.textContent = camera.label.trim() || `Câmera ${indice + 1}`;
+    select.append(opcao);
+  });
+  if (atualId && lista.some((camera) => camera.deviceId === atualId)) select.value = atualId;
+  else if (escolhido) select.value = escolhido;
+}
+
+function aplicarControles(ajuste: AjusteCamera): void {
+  ajusteAtual = ajuste;
+  const tocha = document.getElementById("tocha");
+  if (tocha) {
+    tocha.hidden = !ajuste.tocha;
+    tocha.textContent = cameraTocha ? "Apagar lanterna" : "Lanterna";
+  }
+  const zoom = document.getElementById("zoom");
+  const rotulo = document.getElementById("rotulo-zoom");
+  const temZoom = ajuste.zoomMin != null && ajuste.zoomMax != null && ajuste.zoomMax > ajuste.zoomMin;
+  if (rotulo) rotulo.hidden = !temZoom;
+  if (zoom instanceof HTMLInputElement && temZoom && ajuste.zoomMin != null && ajuste.zoomMax != null) {
+    zoom.min = String(ajuste.zoomMin);
+    zoom.max = String(ajuste.zoomMax);
+    zoom.step = String(ajuste.zoomPasso && ajuste.zoomPasso > 0 ? ajuste.zoomPasso : 0.1);
+    const valor = cameraZoom ?? ajuste.zoom ?? ajuste.zoomMin;
+    zoom.value = String(valor);
+  }
+}
+
+async function alternarTocha(): Promise<void> {
+  const track = trilhaVideo();
+  const status = document.getElementById("status-camera");
+  if (!track) return;
+  cameraTocha = !cameraTocha;
+  try {
+    const pedido = { torch: cameraTocha } as MediaTrackConstraintSet;
+    await track.applyConstraints({ advanced: [pedido] });
+  } catch {
+    cameraTocha = false;
+    if (status) status.textContent = "Esta lente não acendeu a lanterna.";
+  }
+  const botaoTocha = document.getElementById("tocha");
+  if (botaoTocha) botaoTocha.textContent = cameraTocha ? "Apagar lanterna" : "Lanterna";
 }
 
 function pararCamera(): void {
@@ -942,83 +1079,152 @@ function pararCamera(): void {
   fluxo?.getTracks().forEach((trilha) => trilha.stop());
   fluxo = null;
   estado.cameraLigada = false;
+  cameraTocha = false;
+  cameraZoom = null;
+  ajusteAtual = null;
+  atualizarVisibilidadeCamera();
 }
 
-async function abrirCamera(): Promise<void> {
+async function abrirFluxo(deviceId?: string): Promise<MediaStream> {
+  let ultimo: unknown;
+  for (const video of restricoesCamera(deviceId)) {
+    try {
+      return await navigator.mediaDevices.getUserMedia({ audio: false, video });
+    } catch (erro) {
+      ultimo = erro;
+    }
+  }
+  throw ultimo instanceof Error ? ultimo : new Error("câmera indisponível");
+}
+
+async function abrirCamera(deviceId?: string): Promise<void> {
   const video = document.getElementById("visor");
   const status = document.getElementById("status-camera");
   if (!(video instanceof HTMLVideoElement) || !(status instanceof HTMLElement)) return;
   if (!navigator.mediaDevices?.getUserMedia) {
-    status.textContent = "Este navegador não abre a câmera. Use a imagem ou cole o código.";
+    status.textContent = "Este navegador não abre a câmera. Use Ler de foto, a galeria ou cole o código.";
     return;
   }
-  try {
-    fluxo = await navigator.mediaDevices.getUserMedia({
-      audio: false,
-      video: { facingMode: { ideal: "environment" }, width: { ideal: 1280 }, height: { ideal: 720 } },
-    });
-  } catch {
-    status.textContent = "A câmera não abriu. Confira a permissão. Imagem e texto continuam disponíveis.";
-    return;
-  }
-  estado.cameraLigada = true;
-  video.hidden = false;
-  video.srcObject = fluxo;
-  await video.play();
-  status.textContent = "Aponte para o DataMatrix, o QR ou o GS1-128.";
   const minha = ++geracaoCamera;
-  const canvas = document.createElement("canvas");
-  const ctx = canvas.getContext("2d", { willReadFrequently: true });
-  const nativo = await criarDetector();
-  const loop = async () => {
-    if (minha !== geracaoCamera || !fluxo || !ctx) return;
-    if (video.readyState >= 2 && video.videoWidth > 0) {
-      const largura = Math.min(video.videoWidth, 900);
-      const altura = Math.round(video.videoHeight * (largura / video.videoWidth));
-      canvas.width = largura;
-      canvas.height = altura;
-      ctx.drawImage(video, 0, 0, largura, altura);
-      try {
-        let texto = "";
-        let caixaCodigo: Caixa | null = null;
-        if (nativo) {
-          const marcas = await nativo.detect(canvas);
-          const marca = marcas.find((item) => item.rawValue);
-          texto = marca?.rawValue ?? "";
-          if (marca?.boundingBox) {
-            caixaCodigo = {
-              x: marca.boundingBox.x,
-              y: marca.boundingBox.y,
-              largura: marca.boundingBox.width,
-              altura: marca.boundingBox.height,
-            };
-          }
-        }
-        if (!texto) {
-          const imagem = ctx.getImageData(0, 0, largura, altura);
-          const lido = await lerCodigo(imagem);
-          if (lido) {
-            texto = lido.texto;
-            caixaCodigo = lido.caixa;
-          }
-        }
-        if (texto && minha === geracaoCamera) {
-          const fotos = await fotosDe(canvas, largura, altura, caixaCodigo);
-          await publicar(texto, "camera", fotos);
-          return;
-        }
-      } catch {
-        status.textContent = "A leitura da câmera falhou neste quadro. Continuando…";
+  fluxo?.getTracks().forEach((trilha) => trilha.stop());
+  fluxo = null;
+  cameraTocha = false;
+  let aberto: MediaStream;
+  try {
+    aberto = await abrirFluxo(deviceId);
+  } catch {
+    if (minha !== geracaoCamera) return;
+    estado.cameraLigada = false;
+    status.textContent = "A câmera não abriu. Confira a permissão, ou use Ler de foto.";
+    atualizarVisibilidadeCamera();
+    return;
+  }
+  if (minha !== geracaoCamera) {
+    aberto.getTracks().forEach((trilha) => trilha.stop());
+    return;
+  }
+  fluxo = aberto;
+  estado.cameraLigada = true;
+  video.srcObject = fluxo;
+  try {
+    await video.play();
+  } catch {
+    if (minha === geracaoCamera) status.textContent = "O vídeo da câmera não começou. Tente de novo ou use Ler de foto.";
+  }
+  if (minha !== geracaoCamera) return;
+  const track = trilhaVideo();
+  if (track) {
+    const ajuste = await ajustarTrilha(track);
+    if (minha !== geracaoCamera) return;
+    aplicarControles(ajuste);
+    const lista = await listarCameras();
+    if (minha !== geracaoCamera) return;
+    const atual = track.getSettings().deviceId ?? "";
+    preencherCameras(lista, atual);
+    if (!deviceId) {
+      const melhor = escolherCameraPrincipal(lista, atual);
+      if (melhor && atual && melhor !== atual) {
+        await abrirCamera(melhor);
+        return;
       }
     }
-    if (minha === geracaoCamera) window.setTimeout(() => void loop(), 450);
-  };
-  void loop();
+  }
+  if (minha !== geracaoCamera) return;
+  if (video.videoWidth > 0) video.style.aspectRatio = `${video.videoWidth} / ${video.videoHeight}`;
+  status.textContent = video.videoWidth
+    ? `${video.videoWidth}×${video.videoHeight}. Enquadre o código no quadrado. Use zoom e lanterna se ele for pequeno.`
+    : "Enquadre o código no quadrado. Use zoom e lanterna se ele for pequeno.";
+  atualizarVisibilidadeCamera();
+  const canvas = document.createElement("canvas");
+  void vigiar(minha, canvas, status);
+}
+
+async function listarCameras(): Promise<CameraLista[]> {
+  const dispositivos = await navigator.mediaDevices.enumerateDevices();
+  return dispositivos
+    .filter((item) => item.kind === "videoinput")
+    .map((item) => ({ deviceId: item.deviceId, label: item.label }));
+}
+
+async function vigiar(minha: number, canvas: HTMLCanvasElement, status: HTMLElement): Promise<void> {
+  while (minha === geracaoCamera && fluxo) {
+    const inicio = performance.now();
+    const video = document.getElementById("visor");
+    if (video instanceof HTMLVideoElement && video.readyState >= 2 && video.videoWidth > 0) {
+      try {
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        const ctx = canvas.getContext("2d", { willReadFrequently: true });
+        if (ctx) {
+          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+          const achado = await decodificarQuadro(ctx.getImageData(0, 0, canvas.width, canvas.height), canvas);
+          if (achado && minha === geracaoCamera) {
+            const fotos = await fotosDe(canvas, canvas.width, canvas.height, achado.caixa);
+            await publicar(achado.texto, "camera", fotos);
+            return;
+          }
+        }
+      } catch {
+        if (minha === geracaoCamera) status.textContent = "A leitura da câmera falhou neste quadro. Continuando…";
+      }
+    }
+    const espera = Math.max(0, INTERVALO_CAMERA_MS - (performance.now() - inicio));
+    if (minha !== geracaoCamera) return;
+    await new Promise((resolver) => window.setTimeout(resolver, espera));
+  }
+}
+
+async function decodificarQuadro(
+  imagem: QuadroPixels,
+  canvas: HTMLCanvasElement,
+): Promise<{ texto: string; caixa: Caixa | null } | null> {
+  const lido = await lerQuadro(imagem);
+  if (lido) return { texto: lido.texto, caixa: lido.caixa };
+  const nativo = await detectorNativo();
+  if (!nativo) return null;
+  try {
+    const marcas = await nativo.detect(canvas);
+    const marca = marcas.find((item) => item.rawValue);
+    if (!marca?.rawValue) return null;
+    const caixa = marca.boundingBox
+      ? { x: marca.boundingBox.x, y: marca.boundingBox.y, largura: marca.boundingBox.width, altura: marca.boundingBox.height }
+      : null;
+    return { texto: marca.rawValue, caixa };
+  } catch {
+    return null;
+  }
 }
 
 type LeitorNativo = {
   detect: (fonte: CanvasImageSource) => Promise<{ rawValue?: string; boundingBox?: DOMRectReadOnly }[]>;
 };
+
+let detectorPromessa: Promise<LeitorNativo | null> | null = null;
+
+function detectorNativo(): Promise<LeitorNativo | null> {
+  if (!detectorPromessa) detectorPromessa = criarDetector();
+  return detectorPromessa;
+}
 
 async function criarDetector(): Promise<LeitorNativo | null> {
   const Fn = (window as unknown as {

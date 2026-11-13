@@ -30,9 +30,9 @@ export async function fotosDe(
   altura: number,
   caixa: Caixa | null,
 ): Promise<{ foto: Blob; mini: Blob }> {
-  const grande = quadro(origem, largura, altura, 1280, caixa);
+  const grande = quadro(origem, largura, altura, Math.max(largura, altura), caixa);
   const mini = quadro(origem, largura, altura, 280, caixa);
-  return { foto: await blobDe(grande, 0.72), mini: await blobDe(mini, 0.7) };
+  return { foto: await blobDe(grande, 0.85), mini: await blobDe(mini, 0.7) };
 }
 
 export async function fotosDeArquivo(arquivo: Blob, caixa: Caixa | null): Promise<{ foto: Blob; mini: Blob }> {

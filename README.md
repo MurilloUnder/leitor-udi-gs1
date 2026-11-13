@@ -18,7 +18,7 @@ O aplicativo está publicado em [https://murillounder.github.io/leitor-udi-gs1/]
 
 ## O que a leitura faz
 
-- Câmera, imagem da galeria ou texto colado (leitor USB que manda o código como teclado).
+- Câmera traseira em resolução cheia, com escolha da lente, zoom e lanterna. **Ler de foto** abre a câmera do Android e decodifica a foto inteira; a galeria e o texto colado (leitor USB) continuam disponíveis.
 - Prefixo de simbologia `]d2`, `]C1`, `]Q3` e `]e0`. O GS (ASCII 29) separa campos variáveis. Também valem `<GS>`, `{GS}` e um caractere substituto (o padrão é `|`), porque muitos leitores de teclado descartam o GS.
 - A tabela GS1 sai do arquivo oficial `vendor/gs1-syntax-dictionary/gs1-syntax-dictionary.txt` (Apache 2.0, commit `bc3bff0`).
 - Conferência com uma planilha `.xlsx` ou `.csv` de colunas **modelo**, **nível de embalagem** e **GTIN** (ou **DI**). Colunas extras, como quantidade por embalagem, aparecem ao lado do resultado. O arquivo de exemplo em `public/exemplos/` é fictício.

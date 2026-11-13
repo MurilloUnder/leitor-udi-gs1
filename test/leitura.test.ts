@@ -87,6 +87,27 @@ describe("parser GS1", () => {
     expect(r.vencido).toBeNull();
   });
 
+  it("separa 01, 21, 10, 17, 11 e 240 com GS, validade e fabricação", () => {
+    const corpo = "0000000000000";
+    const gtin = `${corpo}${digitoGs1(corpo)}`;
+    const bruto = `]d201${gtin}21TESTSERIAL01${GS}10LOTEEXEMPLO${GS}1728033011250331240REFEXEMPLO`;
+    const r = ler(bruto, { ano: 2026, mes: 3, dia: 31 });
+    expect(r.erros).toEqual([]);
+    expect(r.simbologia).toBe("]d2");
+    expect(r.campos.map((c) => [c.ai, c.valor])).toEqual([
+      ["01", gtin],
+      ["21", "TESTSERIAL01"],
+      ["10", "LOTEEXEMPLO"],
+      ["17", "280330"],
+      ["11", "250331"],
+      ["240", "REFEXEMPLO"],
+    ]);
+    expect(r.validades).toEqual([{ iso: "2028-03-30", origem: "GS1 (17)" }]);
+    expect(r.campos.find((c) => c.ai === "17")?.detalhe).toBe("30/03/2028");
+    expect(r.campos.find((c) => c.ai === "11")?.detalhe).toBe("31/03/2025");
+    expect(r.vencido).toBeNull();
+  });
+
   it("separa AI fixo e variável no GS, no ]d2 e no substituto", () => {
     const comGs = `]d201${GTIN}1726123110ABC123${GS}21SN9`;
     const lido = ler(comGs);

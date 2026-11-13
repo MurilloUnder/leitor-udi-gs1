@@ -18,6 +18,7 @@
 }
 
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 html, body { margin: 0; background: var(--paper); color: var(--ink); }
 body { min-height: 100dvh; }
 button, input, select, textarea { font: inherit; color: inherit; }
@@ -130,13 +131,36 @@ textarea { min-height: 6.5rem; resize: vertical; }
 .check label { font-weight: 600; grid-template-columns: auto 1fr; align-items: start; }
 .check input { width: 1.3rem; height: 1.3rem; margin-top: 0.15rem; }
 
-.video {
+.visor-caixa {
+  position: relative;
   width: 100%;
+  max-height: 72dvh;
   border-radius: 16px;
+  overflow: hidden;
   background: #111;
-  min-height: 14rem;
-  object-fit: cover;
 }
+.video {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-height: 72dvh;
+  object-fit: cover;
+  object-position: center;
+  background: #111;
+}
+.mira {
+  position: absolute;
+  left: 50%;
+  top: 50%;
+  width: 46%;
+  aspect-ratio: 1;
+  transform: translate(-50%, -50%);
+  border: 2px solid rgba(255, 191, 60, 0.95);
+  border-radius: 12px;
+  pointer-events: none;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35);
+}
+.controles-camera { display: grid; gap: 0.55rem; }
 
 .nav {
   position: fixed;
